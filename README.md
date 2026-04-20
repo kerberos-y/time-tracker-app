@@ -2,8 +2,8 @@
 
 ## Submission Links
 
-- Live URL: `TODO_ADD_DEPLOY_URL`
-- Repository URL: `TODO_ADD_REPOSITORY_URL`
+- Live URL: `https://time-tracker-app-psi.vercel.app`
+- Repository URL: `https://github.com/kerberos-y/time-tracker-app`
 
 Working web app for time tracking with:
 - Start/Stop timer
