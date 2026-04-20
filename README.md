@@ -1,5 +1,10 @@
 # Time Tracker (AI Developer Test Task)
 
+## Submission Links
+
+- Live URL: `TODO_ADD_DEPLOY_URL`
+- Repository URL: `TODO_ADD_REPOSITORY_URL`
+
 Working web app for time tracking with:
 - Start/Stop timer
 - Task name autocomplete
