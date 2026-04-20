@@ -23,7 +23,10 @@ export default function ReportsPage() {
     setIsLoading(true);
     api
       .getReport(period)
-      .then(setReport)
+      .then((result) => {
+        setReport(result);
+        setError("");
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setIsLoading(false));
   }, [period]);
@@ -32,7 +35,7 @@ export default function ReportsPage() {
     <AppShell>
       <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h1 className="mb-3 text-xl font-semibold">Reports</h1>
-        <div className="mb-3 flex gap-2">
+        <div className="mb-3 flex flex-wrap gap-2">
           {(["day", "week", "month"] as ReportPeriod[]).map((value) => (
             <button
               key={value}
@@ -64,6 +67,9 @@ export default function ReportsPage() {
       <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold">Totals by project</h2>
         {isLoading ? <p className="text-sm text-zinc-500">Loading report...</p> : null}
+        {!isLoading && report && report.totals.length === 0 ? (
+          <p className="text-sm text-zinc-500">No tracked time in this period.</p>
+        ) : null}
         <div className="space-y-2">
           {report?.totals.map((item) => (
             <div key={item.projectName} className="flex items-center justify-between rounded-lg border border-zinc-200 p-3">
@@ -76,12 +82,18 @@ export default function ReportsPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold">Entries</h2>
+        {!isLoading && report && report.entries.length === 0 ? (
+          <p className="text-sm text-zinc-500">No entries for selected period.</p>
+        ) : null}
         <div className="space-y-2">
           {report?.entries.map((entry) => (
             <div key={entry.id} className="rounded-md border border-zinc-200 p-3">
               <div className="font-medium">{entry.taskName}</div>
               <div className="text-sm text-zinc-500">
                 {entry.project.name} • {formatMinutes(entry.durationMinutes)}
+              </div>
+              <div className="mt-1 text-xs text-zinc-400">
+                {new Date(entry.startedAt).toLocaleString()}
               </div>
             </div>
           ))}

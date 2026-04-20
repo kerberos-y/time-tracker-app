@@ -6,6 +6,17 @@ import { api } from "@/lib/client/api";
 import { formatMinutes, parseDuration } from "@/lib/client/time";
 import { AppShell } from "@/components/layout/app-shell";
 
+function formatClockDuration(startedAt: string, nowMs: number): string {
+  const diffMs = Math.max(0, nowMs - new Date(startedAt).getTime());
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
+    seconds,
+  ).padStart(2, "0")}`;
+}
+
 export default function Home() {
   const [entries, setEntries] = useState<TimeEntryWithProject[]>([]);
   const [activeEntry, setActiveEntry] = useState<TimeEntryWithProject | null>(null);
@@ -19,9 +30,14 @@ export default function Home() {
   const [editTaskName, setEditTaskName] = useState("");
   const [editProjectId, setEditProjectId] = useState<number | null>(null);
   const [editDuration, setEditDuration] = useState("00:00");
+  const [isLoading, setIsLoading] = useState(true);
+  const [nowMs, setNowMs] = useState(0);
 
-  async function loadData() {
+  async function loadData(showSpinner = false) {
     try {
+      if (showSpinner) {
+        setIsLoading(true);
+      }
       const [entriesData, projectsData] = await Promise.all([
         api.getTodayEntries(),
         api.getProjects(),
@@ -36,12 +52,31 @@ export default function Home() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tracker data");
+    } finally {
+      if (showSpinner) {
+        setIsLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData().catch((err: Error) => setError(err.message));
+    loadData(true).catch((err: Error) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      loadData(false).catch(() => {});
+    }, 15000);
+    return () => clearInterval(poll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -137,17 +172,36 @@ export default function Home() {
   return (
     <AppShell>
       <section className="mb-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="mb-2 text-sm text-zinc-500">Active timer</div>
-        <div className="text-lg font-semibold text-zinc-900">
-          {activeEntry
-            ? `${activeEntry.taskName} • ${activeEntry.project.name}`
-            : "No active timer"}
-        </div>
+        <div className="mb-1 text-sm text-zinc-500">Active timer</div>
+        {activeEntry ? (
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="text-xl font-semibold text-zinc-900">
+                {activeEntry.taskName}
+              </div>
+              <div className="text-sm text-zinc-500">{activeEntry.project.name}</div>
+            </div>
+            <div className="rounded-lg bg-zinc-900 px-3 py-2 font-mono text-lg text-white">
+              {formatClockDuration(activeEntry.startedAt, nowMs)}
+            </div>
+          </div>
+        ) : (
+          <div className="text-lg font-semibold text-zinc-400">No active timer</div>
+        )}
       </section>
 
-      <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-zinc-900">Start / Stop</h2>
-        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+      <section className="mb-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-zinc-900">Start / Stop</h2>
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <input
             value={taskName}
             onChange={(event) => setTaskName(event.target.value)}
@@ -194,7 +248,10 @@ export default function Home() {
       </section>
 
       <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-zinc-900">Today entries</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-zinc-900">Today entries</h2>
+          {isLoading ? <span className="text-xs text-zinc-500">Loading...</span> : null}
+        </div>
         <div className="mb-3 grid gap-2 md:grid-cols-2">
           {grouped.map((group) => (
             <div key={group.name} className="rounded-lg border border-zinc-200 p-3">
@@ -207,84 +264,96 @@ export default function Home() {
             </div>
           ))}
         </div>
-        <div className="space-y-3">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="rounded-lg border border-zinc-200 p-3"
-            >
-              {editingId === entry.id ? (
-                <div className="grid gap-3 md:grid-cols-[1fr_220px_120px_auto]">
-                  <input
-                    value={editTaskName}
-                    onChange={(event) => setEditTaskName(event.target.value)}
-                    className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
-                  />
-                  <select
-                    value={editProjectId ?? ""}
-                    onChange={(event) => setEditProjectId(Number(event.target.value))}
-                    className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
-                  >
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={editDuration}
-                    onChange={(event) => setEditDuration(event.target.value)}
-                    placeholder="hh:mm"
-                    className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveEdit(entry.id)}
-                      className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                      disabled={isBusy}
+        {entries.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">
+            No entries for today yet. Start a timer to create your first record.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                className="rounded-lg border border-zinc-200 p-3"
+              >
+                {editingId === entry.id ? (
+                  <div className="grid gap-3 md:grid-cols-[1fr_220px_120px_auto]">
+                    <input
+                      value={editTaskName}
+                      onChange={(event) => setEditTaskName(event.target.value)}
+                      className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
+                    />
+                    <select
+                      value={editProjectId ?? ""}
+                      onChange={(event) => setEditProjectId(Number(event.target.value))}
+                      className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
                     >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelEdit}
-                      className="rounded-lg bg-zinc-200 px-3 py-2 text-sm text-zinc-800"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-zinc-900">{entry.taskName}</div>
-                    <div className="text-sm text-zinc-500">
-                      {entry.project.name} • {formatMinutes(entry.durationMinutes)}
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={editDuration}
+                      onChange={(event) => setEditDuration(event.target.value)}
+                      placeholder="hh:mm"
+                      className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(entry.id)}
+                        className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                        disabled={isBusy}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="rounded-lg bg-zinc-200 px-3 py-2 text-sm text-zinc-800"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(entry)}
-                      className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-white"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(entry.id)}
-                      className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800"
-                      disabled={isBusy}
-                    >
-                      Delete
-                    </button>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-zinc-900">{entry.taskName}</div>
+                      <div className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: entry.project.color }}
+                        />
+                        <span>{entry.project.name}</span>
+                        <span>•</span>
+                        <span>{formatMinutes(entry.durationMinutes)}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(entry)}
+                        className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-white"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(entry.id)}
+                        className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800"
+                        disabled={isBusy}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </AppShell>
   );

@@ -11,14 +11,21 @@ export default function ProjectsPage() {
   const [color, setColor] = useState("#3b82f6");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("#3b82f6");
+  const [isLoading, setIsLoading] = useState(true);
 
   async function load() {
-    setProjects(await api.getProjects());
+    const items = await api.getProjects();
+    setProjects(items);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load().catch((err: Error) => setError(err.message));
+    load()
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setIsLoading(false));
   }, []);
 
   async function createProject() {
@@ -40,12 +47,21 @@ export default function ProjectsPage() {
   }
 
   async function editProject(project: Project) {
-    const nextName = window.prompt("Project name", project.name) ?? project.name;
-    const nextColor = window.prompt("Color hex", project.color) ?? project.color;
+    setEditingId(project.id);
+    setEditName(project.name);
+    setEditColor(project.color);
+  }
+
+  async function saveEdit(projectId: number) {
+    if (!editName.trim()) {
+      setError("Project name is required");
+      return;
+    }
     try {
       setIsBusy(true);
-      await api.updateProject(project.id, { name: nextName.trim(), color: nextColor.trim() });
+      await api.updateProject(projectId, { name: editName.trim(), color: editColor.trim() });
       await load();
+      setEditingId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update project");
     } finally {
@@ -56,7 +72,16 @@ export default function ProjectsPage() {
   return (
     <AppShell>
       <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h1 className="mb-3 text-xl font-semibold">Projects</h1>
+        <div className="mb-3 flex items-center justify-between">
+          <h1 className="text-xl font-semibold">Projects</h1>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-200"
+          >
+            Refresh
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={name}
@@ -78,24 +103,63 @@ export default function ProjectsPage() {
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+        {isLoading ? <p className="text-sm text-zinc-500">Loading projects...</p> : null}
         <div className="space-y-2">
           {projects.map((project) => (
             <div
               key={project.id}
               className="flex items-center justify-between rounded-lg border border-zinc-200 p-3"
             >
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: project.color }} />
-                <span className="font-medium">{project.name}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => editProject(project)}
-                className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800 disabled:opacity-50"
-                disabled={isBusy}
-              >
-                Edit
-              </button>
+              {editingId === project.id ? (
+                <div className="grid w-full gap-2 md:grid-cols-[1fr_80px_auto]">
+                  <input
+                    value={editName}
+                    onChange={(event) => setEditName(event.target.value)}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
+                  />
+                  <input
+                    type="color"
+                    value={editColor}
+                    onChange={(event) => setEditColor(event.target.value)}
+                    className="h-10 w-full rounded-lg border border-zinc-300 p-1"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(project.id)}
+                      className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                      disabled={isBusy}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: project.color }}
+                    />
+                    <span className="font-medium">{project.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => editProject(project)}
+                    className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800 disabled:opacity-50"
+                    disabled={isBusy}
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
