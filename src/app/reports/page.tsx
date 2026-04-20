@@ -16,17 +16,21 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState<ReportPeriod>("day");
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsLoading(true);
     api
       .getReport(period)
       .then(setReport)
-      .catch((err: Error) => setError(err.message));
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setIsLoading(false));
   }, [period]);
 
   return (
     <AppShell>
-      <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h1 className="mb-3 text-xl font-semibold">Reports</h1>
         <div className="mb-3 flex gap-2">
           {(["day", "week", "month"] as ReportPeriod[]).map((value) => (
@@ -34,7 +38,7 @@ export default function ReportsPage() {
               key={value}
               type="button"
               onClick={() => setPeriod(value)}
-              className={`rounded-md px-3 py-2 text-sm font-medium ${
+              className={`rounded-lg px-3 py-2 text-sm font-medium ${
                 period === value ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"
               }`}
             >
@@ -43,7 +47,7 @@ export default function ReportsPage() {
           ))}
           <a
             href={`/api/reports/export?period=${period}`}
-            className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white"
+            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white"
           >
             Export CSV
           </a>
@@ -57,11 +61,12 @@ export default function ReportsPage() {
         {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
       </section>
 
-      <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold">Totals by project</h2>
+        {isLoading ? <p className="text-sm text-zinc-500">Loading report...</p> : null}
         <div className="space-y-2">
           {report?.totals.map((item) => (
-            <div key={item.projectName} className="flex items-center justify-between rounded-md border border-zinc-200 p-3">
+            <div key={item.projectName} className="flex items-center justify-between rounded-lg border border-zinc-200 p-3">
               <span>{item.projectName}</span>
               <span className="font-medium">{formatMinutes(item.minutes)}</span>
             </div>
@@ -69,7 +74,7 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold">Entries</h2>
         <div className="space-y-2">
           {report?.entries.map((entry) => (

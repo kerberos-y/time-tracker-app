@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import BetterSqlite3 from "better-sqlite3";
 
 type DatabaseSyncType = {
   exec: (sql: string) => void;
@@ -12,14 +13,40 @@ type DatabaseSyncType = {
 
 let cachedDb: DatabaseSyncType | null = null;
 
-function getSqliteConstructor(): new (dbPath: string) => DatabaseSyncType {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const sqliteModule = require("node:sqlite");
-  return sqliteModule.DatabaseSync;
+function getSqliteFromNodeBuiltin(dbPath: string): DatabaseSyncType | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sqliteModule = require("node:sqlite");
+    const db = new sqliteModule.DatabaseSync(dbPath) as DatabaseSyncType;
+    return db;
+  } catch {
+    return null;
+  }
+}
+
+function getSqliteFromBetterSqlite(dbPath: string): DatabaseSyncType {
+  const db = new BetterSqlite3(dbPath);
+  return {
+    exec: (sql: string) => db.exec(sql),
+    prepare: (sql: string) => {
+      const stmt = db.prepare(sql);
+      return {
+        run: (...args: unknown[]) => {
+          const result = stmt.run(...args);
+          const rawId = result.lastInsertRowid;
+          const normalized =
+            typeof rawId === "bigint" ? Number(rawId) : (rawId as number);
+          return { lastInsertRowid: normalized };
+        },
+        all: (...args: unknown[]) => stmt.all(...args),
+        get: (...args: unknown[]) => stmt.get(...args),
+      };
+    },
+  };
 }
 
 function ensureDbPath(): string {
-  const dataDir = path.join(process.cwd(), "data");
+  const dataDir = process.env.VERCEL ? "/tmp/time-tracker-data" : path.join(process.cwd(), "data");
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
@@ -65,8 +92,9 @@ function bootstrapSchema(db: DatabaseSyncType): void {
 
 export function getDb(): DatabaseSyncType {
   if (!cachedDb) {
-    const DatabaseSync = getSqliteConstructor();
-    cachedDb = new DatabaseSync(ensureDbPath());
+    const dbPath = ensureDbPath();
+    cachedDb =
+      getSqliteFromNodeBuiltin(dbPath) ?? getSqliteFromBetterSqlite(dbPath);
     bootstrapSchema(cachedDb);
   }
   return cachedDb;
