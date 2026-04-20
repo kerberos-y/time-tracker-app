@@ -1,49 +1,39 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Project } from "@/lib/domain/types";
-import { api } from "@/lib/client/api";
 import { AppShell } from "@/components/layout/app-shell";
+import type { Project } from "@/lib/domain/types";
+import { useTimeTrackerStore } from "@/lib/client/store/time-tracker-store";
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const {
+    projects,
+    isBusy,
+    isLoading,
+    error,
+    ensureLoaded,
+    createProject: createProjectAction,
+    updateProject,
+    clearError,
+  } = useTimeTrackerStore();
+
   const [name, setName] = useState("");
   const [color, setColor] = useState("#3b82f6");
-  const [error, setError] = useState("");
-  const [isBusy, setIsBusy] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#3b82f6");
-  const [isLoading, setIsLoading] = useState(true);
-
-  async function load() {
-    const items = await api.getProjects();
-    setProjects(items);
-  }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load()
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setIsLoading(false));
+    ensureLoaded(false).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function createProject() {
+  async function onCreateProject() {
     if (!name.trim()) {
-      setError("Project name is required");
       return;
     }
-    try {
-      setIsBusy(true);
-      await api.createProject({ name: name.trim(), color });
-      setName("");
-      await load();
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create project");
-    } finally {
-      setIsBusy(false);
-    }
+    await createProjectAction({ name: name.trim(), color });
+    setName("");
   }
 
   async function editProject(project: Project) {
@@ -54,19 +44,13 @@ export default function ProjectsPage() {
 
   async function saveEdit(projectId: number) {
     if (!editName.trim()) {
-      setError("Project name is required");
       return;
     }
-    try {
-      setIsBusy(true);
-      await api.updateProject(projectId, { name: editName.trim(), color: editColor.trim() });
-      await load();
-      setEditingId(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update project");
-    } finally {
-      setIsBusy(false);
-    }
+    await updateProject(projectId, {
+      name: editName.trim(),
+      color: editColor.trim(),
+    });
+    setEditingId(null);
   }
 
   return (
@@ -76,7 +60,7 @@ export default function ProjectsPage() {
           <h1 className="text-xl font-semibold">Projects</h1>
           <button
             type="button"
-            onClick={() => load()}
+            onClick={() => ensureLoaded(true)}
             className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-200"
           >
             Refresh
@@ -92,14 +76,21 @@ export default function ProjectsPage() {
           <input type="color" value={color} onChange={(event) => setColor(event.target.value)} className="h-10 w-14 rounded-lg border border-zinc-300 p-1" />
           <button
             type="button"
-            onClick={createProject}
+            onClick={onCreateProject}
             className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-50"
             disabled={isBusy}
           >
             Add project
           </button>
         </div>
-        {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-2 flex items-center justify-between text-sm text-rose-600">
+            <span>{error}</span>
+            <button type="button" onClick={clearError} className="text-zinc-700 underline">
+              Dismiss
+            </button>
+          </p>
+        ) : null}
       </section>
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">

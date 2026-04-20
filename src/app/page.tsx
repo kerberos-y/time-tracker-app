@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Project, TimeEntryWithProject } from "@/lib/domain/types";
-import { api } from "@/lib/client/api";
+import type { TimeEntryWithProject } from "@/lib/domain/types";
 import { formatMinutes, parseDuration } from "@/lib/client/time";
 import { AppShell } from "@/components/layout/app-shell";
+import { useTimeTrackerStore } from "@/lib/client/store/time-tracker-store";
 
 function formatClockDuration(startedAt: string, nowMs: number): string {
   const diffMs = Math.max(0, nowMs - new Date(startedAt).getTime());
@@ -18,50 +18,33 @@ function formatClockDuration(startedAt: string, nowMs: number): string {
 }
 
 export default function Home() {
-  const [entries, setEntries] = useState<TimeEntryWithProject[]>([]);
-  const [activeEntry, setActiveEntry] = useState<TimeEntryWithProject | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [taskSuggestions, setTaskSuggestions] = useState<string[]>([]);
+  const {
+    entries,
+    activeEntry,
+    projects,
+    taskSuggestions,
+    selectedProjectId,
+    isLoading,
+    isBusy,
+    error,
+    ensureLoaded,
+    setSelectedProjectId,
+    startTimer,
+    stopTimer,
+    updateEntry,
+    deleteEntry,
+    clearError,
+  } = useTimeTrackerStore();
+
   const [taskName, setTaskName] = useState("");
-  const [projectId, setProjectId] = useState<number | null>(null);
-  const [error, setError] = useState<string>("");
-  const [isBusy, setIsBusy] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTaskName, setEditTaskName] = useState("");
   const [editProjectId, setEditProjectId] = useState<number | null>(null);
   const [editDuration, setEditDuration] = useState("00:00");
-  const [isLoading, setIsLoading] = useState(true);
   const [nowMs, setNowMs] = useState(0);
 
-  async function loadData(showSpinner = false) {
-    try {
-      if (showSpinner) {
-        setIsLoading(true);
-      }
-      const [entriesData, projectsData] = await Promise.all([
-        api.getTodayEntries(),
-        api.getProjects(),
-      ]);
-      setEntries(entriesData.entries);
-      setActiveEntry(entriesData.activeEntry);
-      setTaskSuggestions(entriesData.taskSuggestions);
-      setProjects(projectsData);
-      if (!projectId && projectsData.length > 0) {
-        setProjectId(projectsData[0].id);
-      }
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tracker data");
-    } finally {
-      if (showSpinner) {
-        setIsLoading(false);
-      }
-    }
-  }
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData(true).catch((err: Error) => setError(err.message));
+    ensureLoaded(true).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -74,7 +57,7 @@ export default function Home() {
 
   useEffect(() => {
     const poll = setInterval(() => {
-      loadData(false).catch(() => {});
+      ensureLoaded(false).catch(() => {});
     }, 15000);
     return () => clearInterval(poll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,34 +74,16 @@ export default function Home() {
   }, [entries]);
 
   async function onStart() {
-    if (!taskName.trim() || !projectId) {
-      setError("Task and project are required");
+    if (!taskName.trim() || !selectedProjectId) {
       return;
     }
-    try {
-      setIsBusy(true);
-      setError("");
-      await api.startTimer(taskName.trim(), projectId);
-      setTaskName("");
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start timer");
-    } finally {
-      setIsBusy(false);
-    }
+    await startTimer(taskName.trim(), selectedProjectId);
+    setTaskName("");
   }
 
   async function onStop() {
     if (!activeEntry) return;
-    try {
-      setIsBusy(true);
-      await api.stopTimer(activeEntry.id);
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to stop timer");
-    } finally {
-      setIsBusy(false);
-    }
+    await stopTimer(activeEntry.id);
   }
 
   function startEdit(entry: TimeEntryWithProject) {
@@ -138,35 +103,18 @@ export default function Home() {
   async function saveEdit(entryId: number) {
     const parsedDuration = parseDuration(editDuration);
     if (!editTaskName.trim() || !editProjectId || parsedDuration === null) {
-      setError("Please enter valid task, project and duration (hh:mm)");
       return;
     }
-    try {
-      setIsBusy(true);
-      await api.updateEntry(entryId, {
-        taskName: editTaskName.trim(),
-        projectId: editProjectId,
-        durationMinutes: parsedDuration,
-      });
-      cancelEdit();
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update entry");
-    } finally {
-      setIsBusy(false);
-    }
+    await updateEntry(entryId, {
+      taskName: editTaskName.trim(),
+      projectId: editProjectId,
+      durationMinutes: parsedDuration,
+    });
+    cancelEdit();
   }
 
   async function onDelete(id: number) {
-    try {
-      setIsBusy(true);
-      await api.deleteEntry(id);
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete entry");
-    } finally {
-      setIsBusy(false);
-    }
+    await deleteEntry(id);
   }
 
   return (
@@ -195,7 +143,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-zinc-900">Start / Stop</h2>
           <button
             type="button"
-            onClick={() => loadData(true)}
+            onClick={() => ensureLoaded(true)}
             className="rounded-lg bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200"
           >
             Refresh
@@ -215,8 +163,8 @@ export default function Home() {
             ))}
           </datalist>
           <select
-            value={projectId ?? ""}
-            onChange={(event) => setProjectId(Number(event.target.value))}
+            value={selectedProjectId ?? ""}
+            onChange={(event) => setSelectedProjectId(Number(event.target.value))}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500"
           >
             {projects.map((project) => (
@@ -230,7 +178,7 @@ export default function Home() {
               type="button"
               onClick={onStart}
               className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
-              disabled={Boolean(activeEntry) || isBusy}
+              disabled={Boolean(activeEntry) || isBusy || !taskName.trim() || !selectedProjectId}
             >
               Start
             </button>
@@ -244,7 +192,14 @@ export default function Home() {
             </button>
           </div>
         </div>
-        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-3 flex items-center justify-between text-sm text-rose-600">
+            <span>{error}</span>
+            <button type="button" onClick={clearError} className="text-zinc-700 underline">
+              Dismiss
+            </button>
+          </p>
+        ) : null}
       </section>
 
       <section className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
