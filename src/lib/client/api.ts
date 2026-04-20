@@ -49,6 +49,9 @@ export const api = {
   updateProject(id: number, payload: { name: string; color: string }) {
     return req<Project>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
   },
+  deleteProject(id: number) {
+    return req<{ success: true }>(`/api/projects/${id}`, { method: "DELETE" });
+  },
   getReport(period: ReportPeriod) {
     return req<{
       entries: TimeEntryWithProject[];

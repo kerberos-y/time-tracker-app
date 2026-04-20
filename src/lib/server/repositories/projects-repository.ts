@@ -56,4 +56,11 @@ export const projectsRepository = {
       | undefined;
     return row ? mapProject(row) : null;
   },
+
+  delete(id: number): boolean {
+    const db = getDb();
+    db.prepare("DELETE FROM time_entries WHERE project_id = ?").run(id);
+    db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+    return true;
+  },
 };

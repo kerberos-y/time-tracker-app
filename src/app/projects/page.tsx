@@ -14,6 +14,7 @@ export default function ProjectsPage() {
     ensureLoaded,
     createProject: createProjectAction,
     updateProject,
+    deleteProject,
     clearError,
   } = useTimeTrackerStore();
 
@@ -51,6 +52,12 @@ export default function ProjectsPage() {
       color: editColor.trim(),
     });
     setEditingId(null);
+  }
+
+  async function onDeleteProject(projectId: number) {
+    if (window.confirm("Are you sure you want to delete this project and all its entries?")) {
+      await deleteProject(projectId);
+    }
   }
 
   return (
@@ -141,14 +148,24 @@ export default function ProjectsPage() {
                     />
                     <span className="font-medium">{project.name}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => editProject(project)}
-                    className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800 disabled:opacity-50"
-                    disabled={isBusy}
-                  >
-                    Edit
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => editProject(project)}
+                      className="rounded-lg bg-zinc-200 px-3 py-1.5 text-sm text-zinc-800 disabled:opacity-50"
+                      disabled={isBusy}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteProject(project.id)}
+                      className="rounded-lg bg-rose-200 px-3 py-1.5 text-sm text-rose-800 disabled:opacity-50"
+                      disabled={isBusy}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </>
               )}
             </div>

@@ -105,26 +105,64 @@ export const timeEntriesRepository = {
   stop(id: number): TimeEntryWithProject | null {
     const db = getDb();
     const existing = db
-      .prepare("SELECT * FROM time_entries WHERE id = ?")
-      .get(id) as { started_at: string; ended_at: string | null } | undefined;
+      .prepare(
+        `SELECT id, started_at, ended_at FROM time_entries WHERE id = ?`
+      )
+      .get(id) as { id: number; started_at: string; ended_at: string | null } | undefined;
+    
     if (!existing || existing.ended_at) {
+      console.warn(`[STOP] Entry not found or already stopped: id=${id}`);
       return null;
     }
+    
     const endedAt = new Date().toISOString();
-    const durationMinutes = Math.max(
-      1,
-      Math.round(
-        (new Date(endedAt).getTime() - new Date(existing.started_at).getTime()) / 60000,
-      ),
+    const startTime = new Date(existing.started_at).getTime();
+    const endTime = new Date(endedAt).getTime();
+    
+    // Validate timestamps
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+      console.error(
+        "[STOP] Invalid timestamps",
+        { id, startIso: existing.started_at, endIso: endedAt, startTime, endTime }
+      );
+      return null;
+    }
+    
+    const diffMs = Math.max(0, endTime - startTime);
+    const diffSeconds = Math.round(diffMs / 1000);
+    const durationMinutes = Math.round(diffMs / 60000);
+    
+    console.log(
+      `[STOP] Duration calculated: id=${id}, diffMs=${diffMs}, diffSeconds=${diffSeconds}, durationMinutes=${durationMinutes}`
     );
+    
+    // Allow 0 duration for very quick stops
+    const finalDuration = Math.max(0, durationMinutes);
+    
     db.prepare(
       "UPDATE time_entries SET ended_at = ?, duration_minutes = ?, updated_at = ? WHERE id = ?",
-    ).run(endedAt, durationMinutes, endedAt, id);
-    return this.getById(id);
+    ).run(endedAt, finalDuration, endedAt, id);
+    
+    const updated = this.getById(id);
+    console.log(
+      `[STOP] Entry updated: id=${id}, stored_duration=${updated?.durationMinutes}`
+    );
+    
+    return updated;
   },
 
   update(id: number, taskName: string, projectId: number, durationMinutes: number): TimeEntryWithProject | null {
     const db = getDb();
+    
+    // Validate duration
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 0) {
+      console.error(
+        "Invalid duration in update()",
+        { id, taskName, projectId, durationMinutes }
+      );
+      return null;
+    }
+    
     const now = new Date().toISOString();
     db.prepare(
       `
@@ -132,7 +170,8 @@ export const timeEntriesRepository = {
         SET task_name = ?, project_id = ?, duration_minutes = ?, updated_at = ?
         WHERE id = ?
       `,
-    ).run(taskName, projectId, durationMinutes, now, id);
+    ).run(taskName, projectId, Math.round(durationMinutes), now, id);
+    
     return this.getById(id);
   },
 
@@ -161,3 +200,4 @@ export const timeEntriesRepository = {
     return row ? mapEntry(row) : null;
   },
 };
+

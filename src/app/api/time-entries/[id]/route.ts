@@ -11,18 +11,28 @@ export async function PATCH(
     projectId?: number;
     durationMinutes?: number;
   };
+  
+  // Validate inputs
   if (!body.taskName || !body.projectId || body.durationMinutes === undefined) {
     return new NextResponse("taskName, projectId, durationMinutes are required", { status: 400 });
   }
+  
+  const durationNum = Number(body.durationMinutes);
+  if (!Number.isFinite(durationNum) || durationNum < 0) {
+    return new NextResponse("durationMinutes must be a non-negative number", { status: 400 });
+  }
+  
   const entry = timeEntriesRepository.update(
     Number(id),
     body.taskName.trim(),
     Number(body.projectId),
-    Number(body.durationMinutes),
+    durationNum,
   );
+  
   if (!entry) {
     return new NextResponse("entry not found", { status: 404 });
   }
+  
   return NextResponse.json(entry);
 }
 

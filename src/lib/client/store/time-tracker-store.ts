@@ -27,6 +27,7 @@ type TrackerStore = {
   deleteEntry: (id: number) => Promise<void>;
   createProject: (payload: { name: string; color: string }) => Promise<void>;
   updateProject: (id: number, payload: { name: string; color: string }) => Promise<void>;
+  deleteProject: (id: number) => Promise<void>;
   clearError: () => void;
 };
 
@@ -163,6 +164,21 @@ export const useTimeTrackerStore = create<TrackerStore>((set, get) => ({
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to update project",
+      });
+    } finally {
+      set({ isBusy: false });
+    }
+  },
+
+  async deleteProject(id) {
+    set({ isBusy: true });
+    try {
+      await api.deleteProject(id);
+      await get().ensureLoaded(true);
+      set({ error: "" });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "Failed to delete project",
       });
     } finally {
       set({ isBusy: false });
